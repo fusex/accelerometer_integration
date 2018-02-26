@@ -12,5 +12,6 @@ removes gravity offset and tries to filter noise/drift using low/high-pass filte
 # Status
 Project was not able to produce a satisfactory result on y_acc.csv scenario. Cause is probably hard to remove noise 
 on the accelerometer, imprecision and latency on quaternion data.
-It would be better to have scenarios with IMU on low vibration and limited to only one axis, such as measuring displacement of 
-a wagon on rails.
+
+It would be better to have scenarios with IMU on low vibration and movement limited to only one axis, such as measuring
+displacement of a wagon on rails.
