@@ -6,6 +6,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <wiringPi.h>
 #include <atomic>
 #include <chrono>
 #include <ctime>
@@ -167,14 +168,66 @@ void read_sensors(Queue<sensor_data>& q) {
   }
 }
 
+void check_button() {
+  const int gpio_button = 3;
+  // WiringPi GPIO numerotation
+  wiringPiSetup();
+  // Pin 3 as input and with pull-down
+  pinMode(gpio_button, INPUT);
+  pullUpDnControl(gpio_button, PUD_DOWN);
+
+  int detections = 0;
+  while(1) {
+    // Positive edge
+    {
+      bool pressed_button = false;
+      int samples[10] = {0};
+      int sum = 0;
+      while (!pressed_button) {
+        for (int i = 0; i < 10; i++) {
+          sum -= samples[i];
+          samples[i] = digitalRead(gpio_button);
+          sum += samples[i];
+          if (sum >= 5) {
+            pressed_button = true;
+            break;
+          }
+          delay(10);
+        }
+      }
+    }
+    // Negative edge
+    {
+      bool released_button = false;
+      int samples[10] = {0};
+      int sum = 0;
+      while (!released_button) {
+        for (int i = 0; i < 10; i++) {
+          sum -= samples[i];
+          samples[i] = (digitalRead(gpio_button) ? 0 : 1);
+          sum += samples[i];
+          if (sum == 10) {
+            released_button = true;
+            break;
+          }
+          delay(10);
+        }
+      }
+    }
+    printf("Detection: %d\n", ++detections);
+  }
+}
+
 int main() {
   // Producer sends data, consumer writes it to file
   Queue<sensor_data> q;
   
   // Start read and write threads
+  std::thread t_check_button(check_button);
   std::thread t_read_sensors(std::bind(read_sensors, std::ref(q)));
   std::thread t_write_data(std::bind(write_data, std::ref(q)));
 
+  t_check_button.join();
   t_read_sensors.join();
   t_write_data.join();
 
