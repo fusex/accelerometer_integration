@@ -4,6 +4,8 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <chrono>
+#include <stdexcept>
 
 template <typename T>
 class Queue
@@ -13,9 +15,10 @@ class Queue
   T pop() 
   {
     std::unique_lock<std::mutex> mlock(mutex_);
-    while (queue_.empty())
-    {
-      cond_.wait(mlock);
+    while (queue_.empty()) {
+      if (cond_.wait_for(mlock, std::chrono::milliseconds(100)) ==  std::cv_status::timeout) {
+        throw std::runtime_error("Queue pop has timed out");
+      }
     }
     auto val = queue_.front();
     queue_.pop();
@@ -25,9 +28,10 @@ class Queue
   void pop(T& item)
   {
     std::unique_lock<std::mutex> mlock(mutex_);
-    while (queue_.empty())
-    {
-      cond_.wait(mlock);
+    while (queue_.empty()) {
+      if (cond_.wait_for(mlock, std::chrono::milliseconds(100)) ==  std::cv_status::timeout) {
+        throw std::runtime_error("Queue pop has timed out");
+      }
     }
     item = queue_.front();
     queue_.pop();

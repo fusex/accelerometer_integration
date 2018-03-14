@@ -10,7 +10,9 @@
 #include <atomic>
 #include <chrono>
 #include <ctime>
-#include <sstream> 
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
 #include <system_error>
 #include <thread>
 #include "file_handling.h"
@@ -19,6 +21,8 @@
 #include "lps.h"
 #include "lsm6.h"
 #include "Queue.h"
+
+volatile std::atomic<bool> reset;
 
 class sensor_data {
 public:
@@ -77,14 +81,21 @@ void write_data(Queue<sensor_data>& q) {
   }
   fclose(output_handle);
 
-  for (int i = 0; ; i++) {
+  for (int i = 0; !reset ; i++) {
     std::stringstream ssf;
     ssf << directory << "/data_" << i;
     FILE *output_handle = open_filename(ssf.str().c_str());
     // 7000 samples gives about 10s of data per file
     for (int j = 0; j < 7000; j++) {
       sensor_data d;
-      q.pop(d);
+      try {
+        q.pop(d);
+      } catch (const std::runtime_error& e) {
+        if (!reset) {
+          std::cerr << "Timeout has been reached on queue pop" << std::endl;
+        }
+        break;
+      }
       // Print sensor data loop
       fprintf(output_handle, "%" PRId64 ", %" PRId32 ", %" PRId32 ", %" PRId32 ", %" PRId32
               ", %" PRId32 ", %" PRId32 ", %" PRId32 ", %" PRId32 ", %" PRId32 ", %" PRId32
@@ -130,7 +141,7 @@ void read_sensors(Queue<sensor_data>& q) {
   lps.enable(lps_config);
   
   // Collect data loop
-  while(1) {
+  while (!reset) {
     // Request i2c transactions to i2c_bus class
     lsm6.request_read();
     lis3mdl.request_read();
@@ -176,61 +187,61 @@ void check_button() {
   pinMode(gpio_button, INPUT);
   pullUpDnControl(gpio_button, PUD_DOWN);
 
-  int detections = 0;
-  while(1) {
-    // Positive edge
-    {
-      bool pressed_button = false;
-      int samples[10] = {0};
-      int sum = 0;
-      while (!pressed_button) {
-        for (int i = 0; i < 10; i++) {
-          sum -= samples[i];
-          samples[i] = digitalRead(gpio_button);
-          sum += samples[i];
-          if (sum >= 5) {
-            pressed_button = true;
-            break;
-          }
-          delay(10);
+  // Positive edge
+  {
+    bool pressed_button = false;
+    int samples[10] = {0};
+    int sum = 0;
+    while (!pressed_button) {
+      for (int i = 0; i < 10; i++) {
+        sum -= samples[i];
+        samples[i] = digitalRead(gpio_button);
+        sum += samples[i];
+        if (sum >= 5) {
+          pressed_button = true;
+          break;
         }
+        delay(10);
       }
     }
-    // Negative edge
-    {
-      bool released_button = false;
-      int samples[10] = {0};
-      int sum = 0;
-      while (!released_button) {
-        for (int i = 0; i < 10; i++) {
-          sum -= samples[i];
-          samples[i] = (digitalRead(gpio_button) ? 0 : 1);
-          sum += samples[i];
-          if (sum == 10) {
-            released_button = true;
-            break;
-          }
-          delay(10);
-        }
-      }
-    }
-    printf("Detection: %d\n", ++detections);
   }
+  // Negative edge
+  {
+    bool released_button = false;
+    int samples[10] = {0};
+    int sum = 0;
+    while (!released_button) {
+      for (int i = 0; i < 10; i++) {
+        sum -= samples[i];
+        samples[i] = (digitalRead(gpio_button) ? 0 : 1);
+        sum += samples[i];
+        if (sum == 10) {
+          released_button = true;
+          break;
+        }
+        delay(10);
+      }
+    }
+  }
+  std::cout << "Resetting sensors, creating new directory" << std::endl;
+  reset = true;
 }
 
 int main() {
   // Producer sends data, consumer writes it to file
   Queue<sensor_data> q;
-  
-  // Start read and write threads
-  std::thread t_check_button(check_button);
-  std::thread t_read_sensors(std::bind(read_sensors, std::ref(q)));
-  std::thread t_write_data(std::bind(write_data, std::ref(q)));
 
-  t_check_button.join();
-  t_read_sensors.join();
-  t_write_data.join();
+  while(1) {
+    reset = false;
+    // Start read and write threads
+    std::thread t_check_button(check_button);
+    std::thread t_read_sensors(std::bind(read_sensors, std::ref(q)));
+    std::thread t_write_data(std::bind(write_data, std::ref(q)));
 
+    t_check_button.join();
+    t_read_sensors.join();
+    t_write_data.join();
+  }
   return 0;
 }
     
