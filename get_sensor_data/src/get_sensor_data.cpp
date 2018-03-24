@@ -22,7 +22,7 @@
 #include "lsm6.h"
 #include "Queue.h"
 
-volatile std::atomic<bool> reset;
+volatile std::atomic<bool> on_off_n;
 
 class sensor_data {
 public:
@@ -81,7 +81,7 @@ void write_data(Queue<sensor_data>& q) {
   }
   fclose(output_handle);
 
-  for (int i = 0; !reset ; i++) {
+  for (int i = 0; on_off_n ; i++) {
     std::stringstream ssf;
     ssf << directory << "/data_" << i;
     FILE *output_handle = open_filename(ssf.str().c_str());
@@ -91,7 +91,7 @@ void write_data(Queue<sensor_data>& q) {
       try {
         q.pop(d);
       } catch (const std::runtime_error& e) {
-        if (!reset) {
+        if (on_off_n) {
           std::cerr << "Timeout has been reached on queue pop" << std::endl;
         }
         break;
@@ -141,7 +141,7 @@ void read_sensors(Queue<sensor_data>& q) {
   lps.enable(lps_config);
   
   // Collect data loop
-  while (!reset) {
+  while (on_off_n) {
     // Request i2c transactions to i2c_bus class
     lsm6.request_read();
     lis3mdl.request_read();
@@ -187,61 +187,83 @@ void check_button() {
   pinMode(gpio_button, INPUT);
   pullUpDnControl(gpio_button, PUD_DOWN);
 
-  // Positive edge
-  {
-    bool pressed_button = false;
-    int samples[10] = {0};
-    int sum = 0;
-    while (!pressed_button) {
-      for (int i = 0; i < 10; i++) {
-        sum -= samples[i];
-        samples[i] = digitalRead(gpio_button);
-        sum += samples[i];
-        if (sum >= 5) {
-          pressed_button = true;
-          break;
+  // Open log file
+  FILE *output_handle = open_filename("./get_sensor_data.log");
+
+  while(1) {
+    // Positive edge
+    {
+      bool pressed_button = false;
+      int samples[10] = {0};
+      int sum = 0;
+      while (!pressed_button) {
+        for (int i = 0; i < 10; i++) {
+          sum -= samples[i];
+          samples[i] = digitalRead(gpio_button);
+          sum += samples[i];
+          if (sum >= 5) {
+            pressed_button = true;
+            break;
+          }
+          delay(10);
         }
-        delay(10);
       }
     }
-  }
-  // Negative edge
-  {
-    bool released_button = false;
-    int samples[10] = {0};
-    int sum = 0;
-    while (!released_button) {
-      for (int i = 0; i < 10; i++) {
-        sum -= samples[i];
-        samples[i] = (digitalRead(gpio_button) ? 0 : 1);
-        sum += samples[i];
-        if (sum == 10) {
-          released_button = true;
-          break;
+    // Negative edge
+    {
+      bool released_button = false;
+      int samples[10] = {0};
+      int sum = 0;
+      while (!released_button) {
+        for (int i = 0; i < 10; i++) {
+          sum -= samples[i];
+          samples[i] = (digitalRead(gpio_button) ? 0 : 1);
+          sum += samples[i];
+          if (sum == 10) {
+            released_button = true;
+            break;
+          }
+          delay(10);
         }
-        delay(10);
       }
     }
+    on_off_n = !on_off_n;
+    if (on_off_n) {
+      // Led on
+      system("echo 0 > /sys/class/leds/led0/brightness");
+    } else {
+      // Led off
+      system("echo 1 > /sys/class/leds/led0/brightness");
+    }
+    fprintf(output_handle, "Toggling to: %s\n", (on_off_n ? "on" : "off"));
+    fflush(output_handle);
   }
-  std::cout << "Resetting sensors, creating new directory" << std::endl;
-  reset = true;
+  fclose(output_handle);
 }
 
 int main() {
   // Producer sends data, consumer writes it to file
   Queue<sensor_data> q;
+  // Sensor capture is off
+  on_off_n = false;
+  system("echo 1 > /sys/class/leds/led0/brightness");
+  // Button management thread
+  std::thread t_check_button(check_button);
 
   while(1) {
-    reset = false;
+    while (!on_off_n) {
+      delay(1000);
+    }
+    
     // Start read and write threads
-    std::thread t_check_button(check_button);
     std::thread t_read_sensors(std::bind(read_sensors, std::ref(q)));
     std::thread t_write_data(std::bind(write_data, std::ref(q)));
 
-    t_check_button.join();
     t_read_sensors.join();
     t_write_data.join();
   }
+
+  t_check_button.join();
   return 0;
 }
     
