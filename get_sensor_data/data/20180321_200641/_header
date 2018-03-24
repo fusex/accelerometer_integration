@@ -1,0 +1,7 @@
+# Timestamp since EPOCH in nanoseconds
+# Accelerometer: ODR = 416Hz, FS = +-8g, a_x(m/s^2) = a_x*9.8*(0.244*10**-3)
+# Gyroscope: ODR = 416Hz, FS = +-2000 dps, g_x(dps) = g_x*(70*10**-3)
+# Magnetometer: ODR = 155Hz, FS = +-4 gauss, m_x(gauss) = m_x*(146*10**-6)
+# Altimeter: ODR = 25Hz, p(hPa) = p/4096
+# Thermometer: ODR = 25Hz, t(C) = 42.5 + (t/480)
+timestamp, a_x, a_y, a_z, g_x, g_y, g_z, m_x, m_y, m_z, p, t, a_valid, g_valid, mx_valid, my_valid, mz_valid, p_valid, t_valid
