@@ -74,8 +74,11 @@ void write_data(Queue<sensor_data>& q) {
             "g_x*(70*10**-3)\n");
     fprintf(output_handle, "# Magnetometer: ODR = 155Hz, FS = +-4 gauss, m_x(gauss) = "
             "m_x*(146*10**-6)\n");
-    fprintf(output_handle, "# Altimeter: ODR = 25Hz, p(hPa) = p/4096\n");
+    fprintf(output_handle, "# Barometer: ODR = 25Hz, p(hPa) = p/4096\n");
     fprintf(output_handle, "# Thermometer: ODR = 25Hz, t(C) = 42.5 + (t/480)\n");
+    fprintf(output_handle,
+            "# Altimeter: h(m) = ((1013.25/p(hPa))**(1/5.257)-1)*(t(C)+273.15)/0.0065\n");
+
     fprintf(output_handle, "timestamp, a_x, a_y, a_z, g_x, g_y, g_z, m_x, m_y, m_z, p, t, "
             "a_valid, g_valid, mx_valid, my_valid, mz_valid, p_valid, t_valid\n");
   }

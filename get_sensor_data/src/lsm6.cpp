@@ -17,6 +17,16 @@ void lsm6::handle::enable(const comm_config & config)
     // [3:2] FS_G = 11 (2000 dps)
     write_reg(CTRL2_G, 0b01101100);
 
+    // [7:7] XL_BW_SCAL_ODR = 0 (bandwidth determined by ODR)
+    // [6:6] SLEEP_G = 0 (gyroscope on)
+    // [5:5] INT2_ON_INT1 = 0 (dont care)
+    // [4:4] FIFO_TEMP_EN = 0 (dont care)
+    // [3:3] DRDY_MASK = 1 (data is not ready until filter is stable)
+    // [2:2] I2C_DISABLED = 0
+    // [1:1] Reserved (0)
+    // [0:0] STOP_ON_FTH = 0 (dont care)
+    write_reg(CTRL4_C, 0b00001000);
+
     // defaults
     write_reg(CTRL7_G, 0b00000000);
 
